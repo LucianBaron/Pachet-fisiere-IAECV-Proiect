@@ -7,12 +7,13 @@ import pandas as pd
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier # For later
 import tensorflow as tf
-from tensorflow import Sequential
-from tensorflow import Dense, Dropout, BatchNormalization
-from tensorflow import Adam
-from tensorflow import BinaryCrossentropy
-from tensorflow import l1_l2
-from tensorflow import EarlyStopping
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import Dense, Dropout, BatchNormalization
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.losses import BinaryCrossentropy
+from tensorflow.keras.regularizers import l1_l2
+from tensorflow.keras.callbacks import EarlyStopping
+import itertools
 # Ensure TensorFlow logging is not too verbose (optional)
 # tf.get_logger().setLevel('ERROR')
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' # Suppress TensorFlow C++ level warnings
@@ -163,11 +164,79 @@ def build_and_train_fcnn(X_train, y_train, X_val, y_val, config, input_shape):
     return accuracy
 
 
+def generate_fcnn_configs(limit=100):
+    """
+    Generates a list of FCNN hyperparameter configurations.
+    Aims for >= 100 distinct configurations.
+    """
+    
+    # Define options for each hyperparameter
+    hidden_units_options = [
+        [64],             # 1 layer, 64 units
+        [128],            # 1 layer, 128 units
+        [32, 32],         # 2 layers, 32 units each
+        [64, 32],         # 2 layers, 64 then 32 units
+        [128, 64],        # 2 layers, 128 then 64 units
+        [64, 64, 32]      # 3 layers
+    ] # 6 options
+    
+    activation_options = ['relu', 'tanh'] # 2 options
+    
+    dropout_rate_options = [0.0, 0.2, 0.5] # 3 options (0.0 means no dropout)
+    
+    l2_reg_options = [0.0, 0.001, 0.0001] # 3 options (0.0 means no L2 regularization)
+    
+    learning_rate_options = [0.001, 0.0005] # 2 options
+
+    # Fixed parameters for this generation run
+    fixed_params = {
+        'epochs': 100,  # Max epochs, early stopping will likely stop it sooner
+        'batch_size': 32,
+        'use_batch_norm': True, # As it's encouraged
+        'use_early_stopping': True,
+        'patience': 10 # Patience for early stopping
+    }
+
+    fcnn_configs_list = []
+    
+    # Generate combinations using itertools.product
+    for hu, act, dr, l2r, lr in itertools.product(
+        hidden_units_options,
+        activation_options,
+        dropout_rate_options,
+        l2_reg_options,
+        learning_rate_options
+    ):
+        config = {
+            'hidden_units': hu,
+            'activation': act,
+            'dropout_rate': dr,
+            'l2_reg': l2r,
+            'learning_rate': lr,
+            **fixed_params # Add the fixed parameters
+        }
+        fcnn_configs_list.append(config)
+        
+    print(f"Generated {len(fcnn_configs_list)} FCNN configurations.") # Should be 6*2*3*3*2 = 216 configurations
+    
+    # If you need to strictly limit to just over 100, you could sample:
+    import random
+    if len(fcnn_configs_list) > limit: # Example limit
+        fcnn_configs_list = random.sample(fcnn_configs_list, limit)
+        print(f"Sampled down to {len(fcnn_configs_list)} FCNN configurations.")
+        
+    return fcnn_configs_list
+
+
 def main():
     X_algorithmic, y_numeric, X_spectrograms, folds_indices, class_names = load_data()
 
-    if X_algorithmic is None:
+    if X_algorithmic is None: # Check if data loading failed
+        print("Algorithmic features could not be loaded. Exiting training.")
         return
+    
+    input_shape_algo = (X_algorithmic.shape[1],) 
+
 
     print(f"\nStarting model training with {N_FOLDS}-fold cross-validation...")
     print(f"Algorithmic features shape: {X_algorithmic.shape}")
@@ -245,7 +314,7 @@ def main():
         {'n_estimators': 100, 'max_depth': 10, 'criterion': 'entropy', 'max_features': 'log2'},
         {'n_estimators': 200, 'max_depth': None, 'criterion': 'entropy', 'min_samples_split': 10},
         {'n_estimators': 300, 'max_depth': 15, 'criterion': 'gini', 'min_samples_leaf': 3}
-        # Add more configurations to reach at least 10 as per PDF (Source: 97)
+
     ]
 
     for config_idx, rf_config in enumerate(rf_configs):
@@ -287,16 +356,7 @@ def main():
 
     # --- 3. FCNN with Algorithmic Features ---
     print("\n--- Training FCNN Models ---")
-    # PDF recommends >= 100 configurations. This is a small sample.
-    # You should expand this significantly, or use a systematic way to generate them.
-    fcnn_configs = [
-        {'hidden_units': [64], 'activation': 'relu', 'dropout_rate': 0.2, 'learning_rate': 0.001, 'epochs': 50, 'batch_size': 32, 'use_batch_norm': True, 'l2_reg': 0.001},
-        {'hidden_units': [128, 64], 'activation': 'relu', 'dropout_rate': 0.3, 'learning_rate': 0.001, 'epochs': 100, 'batch_size': 64, 'use_batch_norm': True, 'l2_reg': 0.01},
-        {'hidden_units': [32], 'activation': 'tanh', 'dropout_rate': 0.0, 'learning_rate': 0.0005, 'epochs': 75, 'batch_size': 32, 'use_batch_norm': False, 'l2_reg': 0.0},
-        # Add many more configurations here...
-        # Example: varying number of layers, units, dropout, L2, learning_rate, batch_size, patience for early stopping
-    ]
-    # To reach 100 configs, consider nested loops or itertools.product for hyperparameter ranges
+    fcnn_configs = generate_fcnn_configs() # Call the generation function
 
     for config_idx, fcnn_config in enumerate(fcnn_configs):
         print(f"  Training FCNN with config {config_idx + 1}/{len(fcnn_configs)}: {fcnn_config}")
@@ -311,7 +371,7 @@ def main():
             y_val_fold = y_numeric[val_indices]
 
             if len(np.unique(y_train_fold)) < 2:
-                print(f"    Fold {fold_num+1}: FCNN Training data has only one class. Assigning 0 accuracy.")
+                # ... (handle single class as before) ...
                 fold_accuracies_fcnn.append(0.0)
                 all_results.append({
                     'model_type': 'FCNN', 'config_id': config_idx, 'config_params': str(fcnn_config),
@@ -319,13 +379,13 @@ def main():
                 })
                 continue
             
-            # Ensure y_train_fold and y_val_fold are float32 for Keras binary_crossentropy
             y_train_fold_keras = y_train_fold.astype(np.float32)
             y_val_fold_keras = y_val_fold.astype(np.float32)
 
+            # Pass the correctly defined input_shape_algo
             accuracy = build_and_train_fcnn(X_train_fold_algo, y_train_fold_keras, 
                                             X_val_fold_algo, y_val_fold_keras, 
-                                            fcnn_config, input_shape_algo)
+                                            fcnn_config, input_shape_algo) 
             print(f"    Fold {fold_num+1}/5 - Val Accuracy: {accuracy:.4f}")
             fold_accuracies_fcnn.append(accuracy)
             all_results.append({
@@ -338,8 +398,10 @@ def main():
             })
             
         if fold_accuracies_fcnn:
-            avg_accuracy_fcnn = np.mean([acc for acc in fold_accuracies_fcnn if acc is not None])
-            print(f"  FCNN Config {config_idx+1} Avg CV Accuracy: {avg_accuracy_fcnn:.4f}\n")
+            valid_accuracies = [acc for acc in fold_accuracies_fcnn if acc is not None]
+            if valid_accuracies:
+                 avg_accuracy_fcnn = np.mean(valid_accuracies)
+                 print(f"  FCNN Config {config_idx+1} Avg CV Accuracy: {avg_accuracy_fcnn:.4f}\n")
 
 
     # --- 4. CNN with Spectrograms (TODO) ---

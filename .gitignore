@@ -2,3 +2,4 @@ data/spectrogram_features.npz
 data/cv_speaker_splits.npz
 data/algorithmic_features_normalized.npz
 data/algorithmic_features.npz
+data\cv_speaker_splits.npz
