@@ -205,70 +205,55 @@ def build_and_train_fcnn(X_train, y_train, X_val, y_val, config, input_shape):
 
 
 
-def build_and_train_cnn(X_train, y_train, X_val, y_val, config, input_shape_spectro):
-    """Builds, trains, and evaluates a CNN model."""
-    
+def build_and_train_cnn(X_train, y_train, X_val, y_val, config, input_shape_spectro, fold_info=""):
     model = Sequential()
-    model.add(Input(shape=input_shape_spectro)) # Explicit Input layer
-
-    # Convolutional blocks
+    model.add(Input(shape=input_shape_spectro))
     for filters, kernel_size, pool_size in config.get('conv_blocks', [(32, (3,3), (2,2))]):
-        model.add(Conv2D(filters, kernel_size, 
-                         activation=config.get('activation_cnn', 'relu'),
+        model.add(Conv2D(filters, kernel_size, activation=config.get('activation_cnn', 'relu'),
                          padding='same', 
-                         kernel_regularizer=l1_l2(l2=config.get('l2_reg_cnn', 0.0))))
-        if config.get('use_batch_norm_cnn', True):
-            model.add(BatchNormalization())
-        if pool_size:
-            model.add(MaxPooling2D(pool_size=pool_size))
-        if config.get('dropout_rate_cnn', 0.0) > 0.2: 
-            model.add(Dropout(config['dropout_rate_cnn'] / 2)) 
+                         kernel_regularizer=l1_l2(l2=config.get('l2_reg_cnn', 0.0001)))) # MODIFIED: Reduced L2 for testing
+        if config.get('use_batch_norm_cnn', True): model.add(BatchNormalization())
+        if pool_size: model.add(MaxPooling2D(pool_size=pool_size))
+        # Apply dropout after pooling or conv if no pooling
+        if config.get('dropout_rate_cnn', 0.0) > 0.0 and config.get('dropout_rate_cnn') <= 0.2 : # Only apply if > 0 and not too high for conv
+             model.add(Dropout(config['dropout_rate_cnn'] / 2 if pool_size else config['dropout_rate_cnn']))
+
 
     model.add(Flatten())
-
-    # Dense layers
     for units in config.get('dense_units_cnn', [64]):
-        model.add(Dense(units, 
-                        activation=config.get('activation_cnn', 'relu'),
-                        kernel_regularizer=l1_l2(l2=config.get('l2_reg_cnn', 0.0))))
-        if config.get('use_batch_norm_cnn', True):
-            model.add(BatchNormalization())
-        if config.get('dropout_rate_cnn', 0.0) > 0:
-            model.add(Dropout(config['dropout_rate_cnn']))
-            
-    model.add(Dense(1, activation='sigmoid')) # Output layer
+        model.add(Dense(units, activation=config.get('activation_cnn', 'relu'),
+                        kernel_regularizer=l1_l2(l2=config.get('l2_reg_cnn', 0.0001)))) # MODIFIED: Reduced L2 for testing
+        if config.get('use_batch_norm_cnn', True): model.add(BatchNormalization())
+        if config.get('dropout_rate_cnn', 0.0) > 0: model.add(Dropout(config['dropout_rate_cnn']))
+    model.add(Dense(1, activation='sigmoid'))
     
-    # --- ADD THESE LINES FOR DEBUGGING ---
-    print("\n--- CNN Model Summary ---")
-    model.summary(line_length=120) # Print the model summary
-    print("-------------------------\n")
-    # --- END OF ADDED LINES ---
-    
-    optimizer = Adam(learning_rate=config.get('learning_rate_cnn', 0.001))
+    # MODIFIED: Optimizer with lower learning rate and gradient clipping
+    optimizer = Adam(
+        learning_rate=config.get('learning_rate_cnn', 0.0001), # MODIFIED: Lowered default
+        clipnorm=1.0 # Added gradient clipping
+    )
     model.compile(optimizer=optimizer, loss=BinaryCrossentropy(), metrics=['accuracy'])
     
-    # ... (rest of the function: tf.data.Dataset creation, model.fit, model.evaluate) ...
-    # ... (as previously discussed) ...
     train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
     train_dataset = train_dataset.shuffle(buffer_size=len(X_train)).batch(config.get('batch_size', 32)).prefetch(tf.data.AUTOTUNE)
-    
     val_dataset = tf.data.Dataset.from_tensor_slices((X_val, y_val))
     val_dataset = val_dataset.batch(config.get('batch_size', 32)).prefetch(tf.data.AUTOTUNE)
         
     callbacks = []
     if config.get('use_early_stopping', True):
         early_stopping = EarlyStopping(monitor='val_accuracy', patience=config.get('patience', 10),
-                                       restore_best_weights=True, mode='max', verbose=0)
+                                       restore_best_weights=True, mode='max', verbose=0) 
         callbacks.append(early_stopping)
-        
-    history = model.fit(train_dataset, 
-                        validation_data=val_dataset,
+    
+    print(f"      Training CNN {fold_info}...")
+    history = model.fit(train_dataset, validation_data=val_dataset,
                         epochs=config.get('epochs', 100), 
                         callbacks=callbacks,
-                        verbose=0) 
+                        verbose=1) 
     
-    loss, accuracy = model.evaluate(val_dataset, verbose=0) 
+    _, accuracy = model.evaluate(val_dataset, verbose=0)
     return accuracy
+
 
 def generate_fcnn_configs(limit=100):
     """
@@ -346,15 +331,15 @@ def generate_cnn_configs(limit=20):
     
     dense_units_options = [ [64], [128], [64, 32] ] # 3 options
     dropout_rate_options = [0.0, 0.3, 0.5] # 3 options
-    learning_rate_options = [0.001, 0.0005] # 2 options
+    learning_rate_options = [0.001, 0.0005, 0.0001] # 3 options
     # L2 can also be varied: l2_reg_options = [0.0, 0.001]
 
     fixed_cnn_params = {
         'activation_cnn': 'relu',
         'use_batch_norm_cnn': True,
-        'l2_reg_cnn': 0.001, # Example fixed L2
+        'l2_reg_cnn': 0.0, # Example fixed L2
         'epochs': 30,
-        'batch_size': 32,
+        'batch_size': 16,
         'use_early_stopping': True,
         'patience': 10
     }
@@ -617,7 +602,7 @@ def main():
             input_shape_spectro = X_spectrograms.shape[1:] # (freq_bins, time_frames, channels)
             print(f"Input shape for CNN: {input_shape_spectro}")
             
-            cnn_configs = generate_cnn_configs(20) # Generate >= 20 configs
+            cnn_configs = generate_cnn_configs(20) # Generate x configs
 
             for config_idx, cnn_config in enumerate(cnn_configs):
                 print(f"  Training CNN with config {config_idx + 1}/{len(cnn_configs)}: {cnn_config}")
@@ -632,7 +617,7 @@ def main():
                     y_val_fold = y_numeric[val_indices]
 
                     if len(np.unique(y_train_fold)) < 2:
-                        print(f"    Fold {fold_num+1}: CNN Training data has only one class. Assigning 0 accuracy.")
+                        print(f"Fold {fold_num+1}: CNN Training data has only one class. Assigning 0 accuracy.")
                         fold_accuracies_cnn.append(0.0)
                         all_results.append({
                             'model_type': 'CNN', 'config_id': config_idx, 'config_params': str(cnn_config),
@@ -646,7 +631,7 @@ def main():
                     accuracy = build_and_train_cnn(X_train_fold_spectro, y_train_fold_keras,
                                                 X_val_fold_spectro, y_val_fold_keras,
                                                 cnn_config, input_shape_spectro)
-                    print(f"    Fold {fold_num+1}/5 - Val Accuracy: {accuracy:.4f}")
+                    print(f"Fold {fold_num+1}/5 - Val Accuracy: {accuracy:.4f}")
                     fold_accuracies_cnn.append(accuracy)
                     all_results.append({
                         'model_type': 'CNN',
