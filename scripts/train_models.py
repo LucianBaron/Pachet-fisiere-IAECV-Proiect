@@ -48,7 +48,8 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # Input files
 ALGO_FEATURES_FILE = os.path.join(DATA_DIR, 'algorithmic_features_normalized.npz')
-SPECTROGRAM_FEATURES_FILE = os.path.join(DATA_DIR, 'spectrogram_features.npz') # For CNN later
+SPECTROGRAM_FEATURES_FILE = os.path.join(DATA_DIR, 'spectrogram_features_normalized.npz') # Using normalized spectrograms
+RAW_SPECTROGRAM_FEATURES_FILE = os.path.join(DATA_DIR, 'spectrogram_features.npz') # Original raw file (fallback)
 CV_SPLITS_FILE = os.path.join(DATA_DIR, 'cv_speaker_splits.npz')
 
 # Output file for results
@@ -70,30 +71,43 @@ def load_data():
         class_names_out = label_encoder.classes_
         print(f"Labels encoded: {class_names_out} -> {label_encoder.transform(class_names_out)}")
 
+        # Try to load normalized spectrograms first, then fall back to raw if needed
         if os.path.exists(SPECTROGRAM_FEATURES_FILE):
-            print(f"Loading spectrograms from: {SPECTROGRAM_FEATURES_FILE}")
+            print(f"Loading normalized spectrograms from: {SPECTROGRAM_FEATURES_FILE}")
             spectro_data = np.load(SPECTROGRAM_FEATURES_FILE, allow_pickle=True)
             # Check if features were saved as a list or stacked array
             if 'features_list' in spectro_data:
-                # This case means stacking failed during feature extraction, and they are saved as a list of arrays.
-                # This would require different handling (e.g. padding/truncating here or ensuring all are same shape)
-                # For now, let's assume 'features' (stacked array) is present.
-                print("Warning: Spectrograms were saved as a list. Ensure consistent shapes for batching.")
-                X_spectrograms = spectro_data['features_list'] # This might be an object array
+                print(f"Found list-based spectrogram storage, this format is not supported.")
+                X_spectrograms = None
             elif 'features' in spectro_data:
                 X_spectrograms = spectro_data['features']
+                print(f"Loaded normalized spectrograms with shape: {X_spectrograms.shape}")
             else:
-                print("Warning: 'features' or 'features_list' key not found in spectrogram file.")
+                print(f"Unrecognized spectrogram data format. Missing 'features' or 'features_list'.")
                 X_spectrograms = None
-            
-            if X_spectrograms is not None and isinstance(X_spectrograms, np.ndarray):
-                 # For Conv2D with 'channels_last', ensure there's a channel dimension
-                if X_spectrograms.ndim == 3: # (samples, freq_bins, time_frames)
-                    X_spectrograms = np.expand_dims(X_spectrograms, axis=-1) # (samples, freq_bins, time_frames, 1)
-                print(f"Spectrograms loaded and reshaped to: {X_spectrograms.shape}")
+        elif os.path.exists(RAW_SPECTROGRAM_FEATURES_FILE):
+            print(f"Normalized spectrograms not found! Falling back to raw spectrograms from: {RAW_SPECTROGRAM_FEATURES_FILE}")
+            spectro_data = np.load(RAW_SPECTROGRAM_FEATURES_FILE, allow_pickle=True)
+            # Check if features were saved as a list or stacked array
+            if 'features_list' in spectro_data:
+                print(f"Found list-based spectrogram storage, this format is not supported.")
+                X_spectrograms = None
+            elif 'features' in spectro_data:
+                X_spectrograms = spectro_data['features']
+                print(f"Loaded raw spectrograms with shape: {X_spectrograms.shape}")
+                print(f"WARNING: Using raw spectrograms. For better performance, normalize your spectrograms first.")
+            else:
+                print(f"Unrecognized spectrogram data format. Missing 'features' or 'features_list'.")
+                X_spectrograms = None
         else:
-            print(f"Spectrogram features file not found: {SPECTROGRAM_FEATURES_FILE}")
+            print(f"No spectrogram features file found. CNN training will be skipped.")
             X_spectrograms = None
+            
+        # For Conv2D with 'channels_last', ensure there's a channel dimension
+        if X_spectrograms is not None and isinstance(X_spectrograms, np.ndarray):
+            if X_spectrograms.ndim == 3:  # (samples, freq_bins, time_frames)
+                X_spectrograms = np.expand_dims(X_spectrograms, axis=-1)  # (samples, freq_bins, time_frames, 1)
+                print(f"Spectrograms reshaped to: {X_spectrograms.shape} to add channel dimension")
         
         cv_splits_data = np.load(CV_SPLITS_FILE, allow_pickle=True)
         folds_indices = cv_splits_data['folds']
@@ -104,7 +118,6 @@ def load_data():
             print("Algorithmic features, labels, and CV splits loaded successfully.")
         else:
             raise FileNotFoundError("Missing critical data for algorithmic features or CV splits.")
-
 
     except FileNotFoundError as e:
         print(f"Error: Data file not found. {e}")
@@ -206,6 +219,9 @@ def build_and_train_fcnn(X_train, y_train, X_val, y_val, config, input_shape):
 
 
 def build_and_train_cnn(X_train, y_train, X_val, y_val, config, input_shape_spectro, fold_info=""):
+    tf.keras.backend.clear_session()
+    import gc
+    gc.collect()
     model = Sequential()
     model.add(Input(shape=input_shape_spectro))
     for filters, kernel_size, pool_size in config.get('conv_blocks', [(32, (3,3), (2,2))]):
@@ -252,6 +268,11 @@ def build_and_train_cnn(X_train, y_train, X_val, y_val, config, input_shape_spec
                         verbose=1) 
     
     _, accuracy = model.evaluate(val_dataset, verbose=0)
+
+    tf.keras.backend.clear_session()
+    import gc
+    gc.collect()
+
     return accuracy
 
 
@@ -339,7 +360,7 @@ def generate_cnn_configs(limit=20):
         'use_batch_norm_cnn': True,
         'l2_reg_cnn': 0.0, # Example fixed L2
         'epochs': 30,
-        'batch_size': 16,
+        'batch_size': 4,
         'use_early_stopping': True,
         'patience': 10
     }
@@ -648,7 +669,7 @@ def main():
                         avg_accuracy_cnn = np.mean(valid_accuracies)
                         print(f"  CNN Config {config_idx+1} Avg CV Accuracy: {avg_accuracy_cnn:.4f}\n")
                 tf.keras.backend.clear_session() # Clears the Keras session
-                del model # Explicitly delete the model
+                # del model # Explicitly delete the model
                 import gc
                 gc.collect() # Trigger garbage collection
         else:

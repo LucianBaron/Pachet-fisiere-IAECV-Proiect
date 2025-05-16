@@ -143,3 +143,80 @@ def extract_spectrogram_utterance(utterance_audio, sr,
     # S_log_amplitude_db = librosa.amplitude_to_db(S_mag_selected_bins, ref=np.max)
 
     return S_log_amplitude_db
+
+def normalize_spectrograms(spectrograms, normalization_type='per-sample', per_speaker=False, speaker_ids=None):
+    """
+    Normalizes spectrograms using different normalization strategies.
+    
+    Args:
+        spectrograms (np.ndarray): 3D array of spectrograms with shape (n_samples, n_freq_bins, n_time_frames)
+        normalization_type (str): Type of normalization to apply:
+            - 'per-sample': Z-score normalization for each spectrogram independently (default)
+            - 'global': Z-score normalization across all spectrograms
+            - 'min-max': Min-max scaling to range [0, 1] for each spectrogram
+        per_speaker (bool): If True, normalization is done separately for each speaker's spectrograms
+        speaker_ids (np.ndarray): Array of speaker IDs corresponding to each spectrogram, required if per_speaker=True
+        
+    Returns:
+        np.ndarray: Normalized spectrograms with same shape as input
+    """
+    if spectrograms.size == 0:
+        print("Warning: Empty spectrograms array. Nothing to normalize.")
+        return spectrograms
+    
+    print(f"Normalizing spectrograms using {normalization_type} normalization " + 
+          f"{'per speaker' if per_speaker else 'across all samples'}")
+    
+    # Make a copy to avoid modifying the original
+    norm_spectrograms = spectrograms.copy()
+    
+    # If per-speaker normalization is requested
+    if per_speaker and speaker_ids is not None:
+        if len(speaker_ids) != spectrograms.shape[0]:
+            raise ValueError("Number of speaker IDs must match number of spectrograms")
+        
+        unique_speakers = np.unique(speaker_ids)
+        for speaker in unique_speakers:
+            speaker_mask = (speaker_ids == speaker)
+            speaker_spectros = norm_spectrograms[speaker_mask]
+            
+            # Apply the selected normalization to this speaker's spectrograms
+            if normalization_type == 'global':
+                # Global normalization across all spectrograms from this speaker
+                mean = np.mean(speaker_spectros)
+                std = np.std(speaker_spectros)
+                norm_spectrograms[speaker_mask] = (speaker_spectros - mean) / (std + 1e-10)
+            elif normalization_type == 'min-max':
+                # Min-max scaling across all spectrograms from this speaker
+                min_val = np.min(speaker_spectros)
+                max_val = np.max(speaker_spectros)
+                if max_val > min_val:
+                    norm_spectrograms[speaker_mask] = (speaker_spectros - min_val) / (max_val - min_val)
+            else:  # 'per-sample' (default)
+                # Normalize each spectrogram independently
+                for i, idx in enumerate(np.where(speaker_mask)[0]):
+                    mean = np.mean(speaker_spectros[i])
+                    std = np.std(speaker_spectros[i])
+                    norm_spectrograms[idx] = (speaker_spectros[i] - mean) / (std + 1e-10)
+    else:
+        # No per-speaker separation
+        if normalization_type == 'global':
+            # Global normalization across all spectrograms
+            mean = np.mean(norm_spectrograms)
+            std = np.std(norm_spectrograms)
+            norm_spectrograms = (norm_spectrograms - mean) / (std + 1e-10)
+        elif normalization_type == 'min-max':
+            # Min-max scaling across all spectrograms
+            min_val = np.min(norm_spectrograms)
+            max_val = np.max(norm_spectrograms)
+            if max_val > min_val:
+                norm_spectrograms = (norm_spectrograms - min_val) / (max_val - min_val)
+        else:  # 'per-sample' (default)
+            # Normalize each spectrogram independently
+            for i in range(norm_spectrograms.shape[0]):
+                mean = np.mean(norm_spectrograms[i])
+                std = np.std(norm_spectrograms[i])
+                norm_spectrograms[i] = (norm_spectrograms[i] - mean) / (std + 1e-10)
+    
+    print("Spectrogram normalization complete.")
+    return norm_spectrograms

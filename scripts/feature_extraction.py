@@ -22,7 +22,8 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # --- Output File Names ---
 ALGO_FEATURES_FILE = os.path.join(OUTPUT_DIR, 'algorithmic_features_normalized.npz')
-SPECTROGRAM_FEATURES_FILE = os.path.join(OUTPUT_DIR, 'spectrogram_features.npz') 
+SPECTROGRAM_FEATURES_FILE = os.path.join(OUTPUT_DIR, 'spectrogram_features.npz')
+NORMALIZED_SPECTROGRAM_FILE = os.path.join(OUTPUT_DIR, 'spectrogram_features_normalized.npz')
 
 # Feature extraction parameters
 TARGET_SR = 16000
@@ -201,8 +202,46 @@ def main():
 
     # --- Spectrogram Extraction ---
     print("\n--- Processing Spectrogram Features ---")
-    if os.path.exists(SPECTROGRAM_FEATURES_FILE):
-        print(f"Found existing spectrogram features file: {SPECTROGRAM_FEATURES_FILE}. Skipping extraction.")
+    # Define output file for normalized spectrograms
+    NORMALIZED_SPECTROGRAM_FILE = os.path.join(OUTPUT_DIR, 'spectrogram_features_normalized.npz')
+    
+    if os.path.exists(NORMALIZED_SPECTROGRAM_FILE):
+        print(f"Found existing normalized spectrogram features file: {NORMALIZED_SPECTROGRAM_FILE}. Skipping extraction.")
+    elif os.path.exists(SPECTROGRAM_FEATURES_FILE):
+        print(f"Found existing raw spectrogram file: {SPECTROGRAM_FEATURES_FILE}. Loading for normalization...")
+        
+        # Load existing spectrogram data
+        loaded_data = np.load(SPECTROGRAM_FEATURES_FILE, allow_pickle=True)
+        
+        # Check if normal features array or list-based storage was used
+        if 'features' in loaded_data:
+            all_spectrograms_np = loaded_data['features']
+            print(f"Loaded {all_spectrograms_np.shape[0]} spectrograms with shape {all_spectrograms_np.shape}")
+            all_labels_np_spectro = loaded_data['labels']
+            all_speaker_ids_np_spectro = loaded_data['speakers']
+            processed_indices_spectro = loaded_data['indices']
+            
+            # Normalize spectrograms
+            print("Normalizing spectrograms...")
+            # You can choose normalization type: 'per-sample' (default), 'global', or 'min-max'
+            # And whether to normalize per speaker (True) or across all samples (False)
+            normalized_spectrograms = utils.normalize_spectrograms(
+                all_spectrograms_np, 
+                normalization_type='per-sample',  # Change as needed
+                per_speaker=True,                # Change to False for global normalization
+                speaker_ids=all_speaker_ids_np_spectro
+            )
+            
+            # Save normalized spectrograms
+            np.savez(NORMALIZED_SPECTROGRAM_FILE,
+                     features=normalized_spectrograms,
+                     labels=all_labels_np_spectro,
+                     speakers=all_speaker_ids_np_spectro,
+                     indices=processed_indices_spectro)
+            print(f"Saved NORMALIZED spectrogram features to {NORMALIZED_SPECTROGRAM_FILE}")
+        else:
+            print("Found spectrograms saved as list. This format is not supported for normalization.")
+            print("Re-extract spectrograms by deleting the existing file first.")
     else:
         print(f"No existing spectrogram features file. Starting extraction...")
         
@@ -257,12 +296,30 @@ def main():
                 print(f"\nSuccessfully extracted {len(all_spectrograms_np)} spectrograms.")
                 print(f"Shape of spectrograms array: {all_spectrograms_np.shape}") # (num_samples, freq_bins, time_frames)
 
+                # Save raw spectrograms first
                 np.savez(SPECTROGRAM_FEATURES_FILE, 
                          features=all_spectrograms_np, 
                          labels=all_labels_np_spectro, 
                          speakers=all_speaker_ids_np_spectro,
                          indices=np.array(processed_indices_spectro))
-                print(f"Saved spectrogram features data to {SPECTROGRAM_FEATURES_FILE}")
+                print(f"Saved raw spectrogram features data to {SPECTROGRAM_FEATURES_FILE}")
+                
+                # Now normalize and save normalized spectrograms
+                print("Normalizing spectrograms...")
+                normalized_spectrograms = utils.normalize_spectrograms(
+                    all_spectrograms_np,
+                    normalization_type='per-sample',  # Change as needed
+                    per_speaker=True,                # Change to False for global normalization
+                    speaker_ids=all_speaker_ids_np_spectro
+                )
+                
+                np.savez(NORMALIZED_SPECTROGRAM_FILE,
+                         features=normalized_spectrograms,
+                         labels=all_labels_np_spectro,
+                         speakers=all_speaker_ids_np_spectro,
+                         indices=np.array(processed_indices_spectro))
+                print(f"Saved NORMALIZED spectrogram features to {NORMALIZED_SPECTROGRAM_FILE}")
+                
             except ValueError as ve:
                 print(f"Error stacking spectrograms. Are they all the same shape? {ve}")
                 print("Saving as a list of arrays instead (might require different loading logic).")
@@ -272,6 +329,7 @@ def main():
                          speakers=np.array(all_speaker_ids_spectro),
                          indices=np.array(processed_indices_spectro))
                 print(f"Saved spectrograms (as list) data to {SPECTROGRAM_FEATURES_FILE}")
+                print("Note: Normalized version not created because list format doesn't support normalization")
         else:
             print("\nNo spectrograms were successfully extracted.")
 
