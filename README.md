@@ -9,34 +9,38 @@ Develop a machine learning system for the automatic detection of lies from speec
 
 ## Setup Instructions
 
-### 1. Python Version
+### 1. Recommended: Use Anaconda or Miniconda
 
-- Python 3.9+ required (developed with Python 3.11.9).
+It is highly recommended to use [Anaconda](https://www.anaconda.com/download/) or [Miniconda](https://docs.conda.io/en/latest/miniconda.html) to manage your Python environment. This helps avoid dependency issues, especially with TensorFlow and GPU support.
 
-### 2. Virtual Environment
+**Steps:**
 
-It is highly recommended to use a virtual environment:
+1. **Install Anaconda or Miniconda** (if not already installed).
 
-```bash
-python -m venv .venv
-```
+2. **Create a new environment (replace `iacv` with your preferred name):**
+   ```bash
+   conda create -n iacv python=3.11
+   ```
 
-### 3. Install Dependencies
+3. **Activate the environment:**
+   ```bash
+   conda activate iacv
+   ```
 
-Install required packages:
+4. **Install TensorFlow (CPU version):**
+   ```bash
+   conda install tensorflow
+   ```
+   *For GPU support, follow the [official TensorFlow GPU guide](https://www.tensorflow.org/install/gpu) and install the appropriate CUDA and cuDNN packages.*
 
-```bash
-pip install -r requirements.txt
-```
-
-If you encounter missing packages, try:
-
-```bash
-pip install numpy pandas scikit-learn librosa tensorflow tqdm matplotlib jupyterlab
-```
-
-**For GPU support with TensorFlow:**  
-Ensure you have compatible NVIDIA drivers, CUDA Toolkit, and cuDNN SDK as per the [official TensorFlow GPU guide](https://www.tensorflow.org/install/gpu).
+5. **Install the remaining dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+   If you encounter missing packages, try:
+   ```bash
+   pip install numpy pandas scikit-learn librosa tensorflow tqdm matplotlib jupyterlab
+   ```
 
 ---
 
@@ -136,7 +140,7 @@ python scripts/train_models.py --append_results
 
 ### 5. Evaluate Models
 
-**Script:** `scripts/evaluate_models.py` (to be implemented)  
+**Script:** `scripts/evaluate_models.py`  
 **Purpose:** Summarize cross-validation results, identify best models.
 
 ```bash
@@ -144,7 +148,7 @@ python scripts/evaluate_models.py
 ```
 
 **Inputs:** `results/training_results.csv`  
-**Outputs:** Console summary, possible plots/report
+**Outputs:** Console summary.
 
 ---
 
