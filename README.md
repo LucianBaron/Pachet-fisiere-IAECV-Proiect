@@ -19,7 +19,7 @@ It is highly recommended to use [Anaconda](https://www.anaconda.com/download/) o
 
 2. **Create a new environment (replace `iacv` with your preferred name):**
    ```bash
-   conda create -n iacv python=3.11
+   conda create -n iacv python=3.10
    ```
 
 3. **Activate the environment:**
