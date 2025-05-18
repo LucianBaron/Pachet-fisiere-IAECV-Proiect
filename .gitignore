@@ -5,3 +5,5 @@ data/algorithmic_features.npz
 data\cv_speaker_splits.npz
 data/cv_speaker_splits.npz
 scripts/__pycache__/utils.cpython-310.pyc
+data/spectrogram_features_normalized.npz
+data/cv_speaker_splits.npz

@@ -644,6 +644,13 @@ def main():
                             'model_type': 'CNN', 'config_id': config_idx, 'config_params': str(cnn_config),
                             'fold': fold_num + 1, 'accuracy': 0.0, 'notes': 'Skipped - single class in train'
                         })
+                        # ADDED: Incremental save
+                        if all_results:
+                            try:
+                                pd.DataFrame(all_results).to_csv(TRAINING_RESULTS_FILE, index=False)
+                                print(f"      CNN Config {config_idx+1}, Fold {fold_num+1} (skipped): Results incrementally saved to {TRAINING_RESULTS_FILE}")
+                            except Exception as e:
+                                print(f"      Error incrementally saving results: {e}")
                         continue
                     
                     y_train_fold_keras = y_train_fold.astype(np.float32)
@@ -662,6 +669,13 @@ def main():
                         'accuracy': accuracy,
                         'notes': ''
                     })
+                    # ADDED: Incremental save
+                    if all_results:
+                        try:
+                            pd.DataFrame(all_results).to_csv(TRAINING_RESULTS_FILE, index=False)
+                            print(f"      CNN Config {config_idx+1}, Fold {fold_num+1}: Results incrementally saved to {TRAINING_RESULTS_FILE}")
+                        except Exception as e:
+                            print(f"      Error incrementally saving results: {e}")
                 
                 if fold_accuracies_cnn:
                     valid_accuracies = [acc for acc in fold_accuracies_cnn if acc is not None]
