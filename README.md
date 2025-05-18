@@ -1,153 +1,169 @@
 # AI System for Automatic Detection of Deceptive Speech
 
 ## Project Objective
-The general objective of this project is to develop a machine learning system for the automatic detection of lies from speech (more precisely, deceptive vs. sincere speech). This project is for the BIOSINF I - IAECV course.
 
-**Deadline for Submission:** Sunday, May 18, 2025, 23:59
+Develop a machine learning system for the automatic detection of lies from speech (deceptive vs. sincere speech).  
+**Course:** BIOSINF I - IAECV
 
-## Directory Structure
-The project should follow a structured organization:
+---
 
-
-
-IAECV_Echipa_/
-│
-├── data/
-│ ├── extrAudio/ # Original WAV audio files
-│ │ ├── trial_lie_xxx.wav
-│ │ └── trial_truth_xxx.wav
-│ ├── datasetAnnotation/ # Original CSV annotation files
-│ │ ├── trial_lie_xxx.csv
-│ │ └── trial_truth_xxx.csv
-│ ├── algorithmic_features_normalized.npz # Processed algorithmic features
-│ ├── spectrogram_features.npz # Processed spectrogram features
-│ └── cv_speaker_splits.npz # Cross-validation split indices
-│
-├── notebooks/
-│ └── data_exploration.ipynb # Jupyter notebook for initial data analysis
-│
-├── results/
-│ └── training_results.csv # CSV file storing model training performance
-│
-├── scripts/
-│ ├── utils.py # Utility functions
-│ ├── extragere_trasaturi.py # Script for feature extraction
-│ ├── preprocess_data.py # Script for creating CV splits
-│ ├── train_models.py # Script for training models
-│ └── evaluate_models.py # Script for evaluating models and generating report
-│
-├── presentation/
-│ └── Project_Presentation.pdf # Final project presentation (or .pptx)
-│
-├── pachete_python.txt # List of Python packages used (requirements.txt)
-└── README.md # This file
 ## Setup Instructions
 
 ### 1. Python Version
-This project is developed using Python 3.9+ (Python 3.11.9 was used during development).
+
+- Python 3.9+ required (developed with Python 3.11.9).
 
 ### 2. Virtual Environment
-It is highly recommended to use a virtual environment to manage dependencies.
+
+It is highly recommended to use a virtual environment:
 
 ```bash
-# Create a virtual environment (e.g., named .venv)
 python -m venv .venv
 ```
 
+### 3. Install Dependencies
 
+Install required packages:
 
-3. Install Dependencies
-Install the required Python packages using the provided pachete_python.txt (or requirements.txt) file:
-pip install -r pachete_python.txt
+```bash
+pip install -r requirements.txt
+```
 
+If you encounter missing packages, try:
 
-If pachete_python.txt is not exhaustive, you might need to install these common libraries:
+```bash
 pip install numpy pandas scikit-learn librosa tensorflow tqdm matplotlib jupyterlab
+```
 
+**For GPU support with TensorFlow:**  
+Ensure you have compatible NVIDIA drivers, CUDA Toolkit, and cuDNN SDK as per the [official TensorFlow GPU guide](https://www.tensorflow.org/install/gpu).
 
-For GPU support with TensorFlow (recommended for CNNs): Ensure you have compatible NVIDIA drivers, CUDA Toolkit, and cuDNN SDK installed as per the official TensorFlow GPU support guide.
-Data
-The dataset comprises 121 English audio recordings from notorious US court cases, annotated as deceptive (61) or sincere (60).
-Audio files: Located in data/extrAudio/ (WAV format, 16 kHz, 16-bit PCM).
-Annotations: Located in data/datasetAnnotation/ (CSV format), detailing utterances (start/end times, speaker ID, gender).
-The project works at the utterance level (929 total utterances: 463 deceptive, 466 sincere).
-Speaker IDs: 1-56 for subjects, 'TM' for interviewers (filtered out for subject-specific tasks).
-Running the Scripts
-The scripts should generally be run from the scripts/ directory or the project root, ensuring paths are correctly referenced.
-1. notebooks/data_exploration.ipynb
-Purpose: Initial analysis of the dataset, visualization of waveforms, utterance durations, and basic statistics.
-How to run:
-# Navigate to the notebooks directory or project root
-jupyter lab data_exploration.ipynb 
-# Or jupyter notebook data_exploration.ipynb
+---
 
-Run cells sequentially. This notebook helps understand the data structure and verify counts.
-2. scripts/extragere_trasaturi.py
-Purpose: Extracts algorithmic features (MFCCs, F0 stats, normalized per speaker) and spectrograms from the raw audio utterances. Saves the processed features to the data/ directory.
-How to run:
-python scripts/extragere_trasaturi.py
+## Data
 
+- **Audio files:** `data/extrAudio/` (WAV, 16 kHz, 16-bit PCM)
+- **Annotations:** `data/datasetAnnotation/` (CSV, utterance-level, speaker ID, gender)
+- **Utterances:** 929 total (463 deceptive, 466 sincere)
+- **Speakers:** IDs 1-56 (subjects), 'TM' (interviewers, filtered out)
+- **Work unit:** Utterance level
 
-Outputs:
-data/algorithmic_features_normalized.npz: Contains normalized algorithmic features, labels, speaker IDs, and original indices.
-data/spectrogram_features.npz: Contains padded spectrograms, labels, speaker IDs, and original indices.
-Note: This script checks if the output files already exist and will skip re-extraction if they do. To force re-extraction, delete the .npz files from the data/ directory.
-3. scripts/preprocess_data.py
-Purpose: Creates 5-fold speaker-independent cross-validation splits. It aims to stratify speakers by gender and their predominant utterance class to ensure balanced folds for training.
-How to run:
+---
+
+## Running the Scripts
+
+Scripts should be run from the `scripts/` directory or project root.
+
+### 1. Data Exploration
+
+**Notebook:** `notebooks/data_exploration.ipynb`  
+**Purpose:** Initial analysis, waveform visualization, utterance stats.
+
+```bash
+jupyter lab notebooks/data_exploration.ipynb
+# or
+jupyter notebook notebooks/data_exploration.ipynb
+```
+
+---
+
+### 2. Feature Extraction
+
+**Script:** `scripts/feature_extraction.py`  
+**Purpose:** Extract MFCCs, F0 stats (normalized per speaker), and spectrograms.
+
+```bash
+python scripts/feature_extraction.py
+```
+
+**Outputs:**
+- `data/algorithmic_features_normalized.npz`
+- `data/spectrogram_features.npz`
+
+*Note: Script skips extraction if output files exist. Delete `.npz` files to force re-extraction.*
+
+---
+
+### 3. Preprocess Data
+
+**Script:** `scripts/preprocess_data.py`  
+**Purpose:** Create 5-fold speaker-independent cross-validation splits.
+
+```bash
 python scripts/preprocess_data.py
+```
 
+**Outputs:**
+- `data/cv_speaker_splits.npz`
 
-Inputs: Uses data/algorithmic_features_normalized.npz (for speaker IDs and labels) and raw annotations from data/datasetAnnotation/ (for gender information).
-Outputs:
-data/cv_speaker_splits.npz: Contains a list of dictionaries, each specifying the training and validation utterance indices for one of the 5 folds.
-4. scripts/train_models.py
-Purpose: Trains and evaluates SVM, Random Forest (RF), FCNN, and CNN models using the features and cross-validation splits generated by previous scripts.
-How to run:
-This script accepts command-line arguments to specify which models to train and whether to append results to an existing file.
-# To train all models (SVM, RF, FCNN, CNN) and overwrite/create results_training.csv:
+---
+
+### 4. Train Models
+
+**Script:** `scripts/train_models.py`  
+**Purpose:** Train/evaluate SVM, Random Forest, FCNN, and CNN models.
+
+**Examples:**
+
+```bash
+# Train all models (overwrite results)
 python scripts/train_models.py
 
-# To train only CNN models:
+# Train only CNN models
 python scripts/train_models.py --models cnn
 
-# To train SVM and RF models:
+# Train SVM and RF models
 python scripts/train_models.py --models svm rf
 
-# To train only FCNN and append results to an existing results_training.csv:
+# Train FCNN and append results
 python scripts/train_models.py --models fcnn --append_results
 
-# To train all models and append results:
-python scripts/train_models.py --append_results 
-# or
-python scripts/train_models.py --models all --append_results
+# Train all models and append results
+python scripts/train_models.py --append_results
+```
 
+**Inputs:**
+- `data/algorithmic_features_normalized.npz`
+- `data/spectrogram_features.npz`
+- `data/cv_speaker_splits.npz`
 
-Inputs:
-data/algorithmic_features_normalized.npz
-data/spectrogram_features.npz
-data/cv_speaker_splits.npz
-Outputs:
-results/training_results.csv: A CSV file logging the performance (accuracy) for each model configuration on each fold.
-Note: Training neural networks (FCNN, CNN) can be time-consuming, especially with many configurations. GPU usage is highly recommended.
-5. scripts/evaluate_models.py
-Purpose: (To be implemented) This script will load the results/training_results.csv, calculate average cross-validation accuracies for each model configuration, identify the best performing setup for each model type, and determine the overall best model.
-How to run (once implemented):
+**Outputs:**
+- `results/training_results.csv`
+
+*Note: Neural network training can be time-consuming. GPU recommended.*
+
+---
+
+### 5. Evaluate Models
+
+**Script:** `scripts/evaluate_models.py` (to be implemented)  
+**Purpose:** Summarize cross-validation results, identify best models.
+
+```bash
 python scripts/evaluate_models.py
+```
 
+**Inputs:** `results/training_results.csv`  
+**Outputs:** Console summary, possible plots/report
 
-Inputs: results/training_results.csv
-Outputs: Console output summarizing model performance, and potentially plots or a report.
-Project Requirements Summary
-(Based on Tema_proiect_IAECV_2024-2025.pdf)
-Features:
-Algorithmic: F0, >=13 MFCCs (mean & std dev per utterance), speaker-normalized (z-score).
-Spectrograms: 25ms frames, 10ms step, Hamming, 512 DFT, [0-8]kHz (257 bins), log amplitude (10*log10), zero-padding.
-Models to Develop:
-SVM (>=10 configs)
-Random Forest (RF) (>=10 configs)
-FCNN (>=100 configs) - using algorithmic features.
-CNN (>=20 configs) - using spectrograms.
-Validation: 5-fold cross-validation, speaker-independent, proportional class/gender distribution where possible.
-Evaluation Metric: Accuracy.
-Neural Network Specifics: Sigmoid output, binary
+---
+
+## Project Requirements Summary
+
+- **Features:**
+  - Algorithmic: F0, ≥13 MFCCs (mean & std per utterance), speaker-normalized (z-score)
+  - Spectrograms: 25ms frames, 10ms step, Hamming, 512 DFT, [0-8]kHz (257 bins), log amplitude, zero-padding
+
+- **Models:**
+  - SVM (≥10 configs)
+  - Random Forest (≥10 configs)
+  - FCNN (≥100 configs, algorithmic features)
+  - CNN (≥20 configs, spectrograms)
+
+- **Validation:** 5-fold cross-validation, speaker-independent, balanced class/gender distribution
+
+- **Evaluation Metric:** Accuracy
+
+- **Neural Network Specifics:** Sigmoid output, binary classification
+
+---
